@@ -8,7 +8,7 @@
 # Copyright (c) 2008 op5 AB
 # Original author: Kostyantyn Hushchyn <dev@op5.com>
 # Contributor(s):
-#   Patrick M�ller
+#   Patrick Mueller
 #   Jeremy Martin
 #   Eric Jonsson
 #   stumpr
@@ -1531,6 +1531,8 @@ our $perf_free_space;                          # To display perfdata as free spa
                                                
 our $alertonly;                                # vmfs - list only alerting volumes
 
+our $hostdown;                                 # cluster runtime listhost - count down hosts instead up one
+
 our $blacklist;                                # Contains the blacklist
 our $whitelist;                                # Contains the whitelist
 
@@ -1648,6 +1650,7 @@ GetOptions
                                          "maintenance_mode_state=s" => \$maintenance_mode_state,
                                          "unplugged_nics_state=s"   => \$unplugged_nics_state,
                                          "connect_error_exit=i"     => \$connect_error_exit,
+                                         "hostdown"                 => \$hostdown,
          "V"   => \$version,             "version"                  => \$version,
          "d|debug" => \$DEBUG,
 );
@@ -2961,13 +2964,7 @@ sub cluster_runtime_info
 
                         if (!defined($host_views))
                            {
-                           print "Runtime error\n";
-                           exit 2;
-                           }
-
-                        if (!defined($host_views))
-                           {
-                           print "There are no hosts.\n" ;
+                           print "There are no hosts. Maybe a runtime error\n" ;
                            exit 2;
                            }
 
@@ -2992,27 +2989,37 @@ sub cluster_runtime_info
                         chop($output);
                         chop($output);
                         $state = 0;
-                        my $up_pct = int($up / @$host_views * 100);
-                        if ( $perf_thresholds ne ";"  && $warn_is_percent eq '1'  && $crit_is_percent eq '1')
-                           {
-                           $perfdata = $perfdata . " host_pct=" . $up_pct . "%;" . $perf_thresholds . ";;";
-                           $perfdata = $perfdata . " host_count=" . $up . ";;;;";
-                           $output = $up .  "/" . @$host_views . " (". $up_pct ."%) Hosts up: " . $output;
-                           $state = check_against_threshold($up_pct);
-                           }
-                        elsif ($perf_thresholds ne ";")
-                           {
-                           $perfdata = $perfdata . " host_pct=" . $up_pct . "%;;;;";
-                           $perfdata = $perfdata . " host_count=" . $up . ";" . $perf_thresholds . ";;";
-                           $output = $up .  "/" . @$host_views . " Hosts up: " . $output;
-                           $state = check_against_threshold($up);
+                        my ($hosts, $hosts_pct, $check_type);
+                        if (defined $hostdown) {
+                           $hosts = @$host_views - $up;
+                           $hosts_pct = int($hosts / @$host_views * 100);
+                           $check_type = "DOWN";
                            }
                         else
                            {
-                           $perfdata = $perfdata . " host_count=" . $up . ";" . $perf_thresholds . ";;";
-                           $output = $up .  "/" . @$host_views . " Hosts up: " . $output;
+                           $hosts = $up;
+                           $hosts_pct = int($up / @$host_views * 100);
+                           $check_type = "UP";
                            }
 
+                        if ( $perf_thresholds ne ";"  && $warn_is_percent eq '1'  && $crit_is_percent eq '1')
+                           {
+                           $perfdata = $perfdata . " host_pct=" . $hosts_pct . "%;" . $perf_thresholds . ";;";
+                           $perfdata = $perfdata . " host_count=" . $hosts . ";;;;";
+                           $state = check_against_threshold($hosts_pct);
+                           }
+                        elsif ($perf_thresholds ne ";")
+                           {
+                           $perfdata = $perfdata . " host_pct=" . $hosts_pct . "%;;;;";
+                           $perfdata = $perfdata . " host_count=" . $hosts . ";" . $perf_thresholds . ";;";
+                           $state = check_against_threshold($hosts);
+                           }
+                        else
+                           {
+                           $perfdata = $perfdata . " host_count=" . $hosts . ";" . $perf_thresholds . ";;";
+                           }
+
+                        $output = $hosts .  "/" . @$host_views . " (". $hosts_pct ."%) Hosts ". $check_type .": " . $output;
                         $state = 3 if ($state == 0 && $unknown);
                 }
                 elsif ($subselect eq "status")
