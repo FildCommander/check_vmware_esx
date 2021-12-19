@@ -236,13 +236,38 @@ sub host_runtime_info
        # Ignore unknown sensors
        # https://kb.vmware.com/s/article/57171
        my $rm_unknown = sub {
-          lc($_[0]->{status}->{key}) ne "unknown"
+          if (defined($_[0]->{status}))
+          {
+              $key = lc($_[0]->{status}->{key});
+              if ($key ne "unknown")
+              {
+                  return($key);
+              };
+          };
+          
+          if (defined($_[0]->{healthState}))
+          {
+              $key = lc($_[0]->{healthState}->{key});
+              if ($key ne "unknown")
+              {
+                  return($key);
+              };
+          };
+          
+          return();
        };
 
        # Some systems reports a broken "Memory" device at the storage tree
        # unsure how to deal with that
        my $rm_storage_unknown = sub {
-          lc($_[0]->{status}->{key}) ne "unknown" && lc($_[0]->{name}) ne "memory"
+          $name = $_[0]->{name};
+          $key = lc($_[0]->{status}->{key});
+          if ((not $name =~ /.+?Unconfigured Disk.*/) && ($key ne "unknown") && ($name ne "memory"))
+          {
+              return($key);
+          };
+          
+          return();
        };
 
        if (defined($runtime->healthSystemRuntime))
